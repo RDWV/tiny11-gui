@@ -217,15 +217,50 @@ function Invoke-Tiny11Maker {
     # Create ISO file
     & $WriteLog "Creating ISO file..."
     $isoPath = Join-Path $PSScriptRoot "tiny11.iso"
-    $oscdimgPath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
-    
-    if (Test-Path $oscdimgPath) {
-        & $WriteLog "Creating ISO using oscdimg..."
-        & $oscdimgPath -m -o -u2 -udfver102 -bootdata:2#p0,e,b"$ScratchDisk\tiny11\boot\etfsboot.com"#pEF,e,b"$ScratchDisk\tiny11\efi\microsoft\boot\efisys.bin" "$ScratchDisk\tiny11" "$isoPath"
-        & $WriteLog "ISO file created at: $isoPath"
-    } else {
-        & $WriteLog "Error: oscdimg.exe not found. Please install Windows ADK."
+
+    try {
+        # Create bootable ISO using oscdimg
+        & $WriteLog "Creating bootable ISO..."
+        
+        $ADKDepTools = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\$hostArchitecture\Oscdimg"
+        $localOSCDIMGPath = "$PSScriptRoot\oscdimg.exe"
+
+        if ([System.IO.Directory]::Exists($ADKDepTools)) {
+            & $WriteLog "Will be using oscdimg.exe from system ADK."
+            $OSCDIMG = "$ADKDepTools\oscdimg.exe"
+        } else {
+            & $WriteLog "ADK folder not found. Will be using bundled oscdimg.exe."
+            
+            $url = "https://msdl.microsoft.com/download/symbols/oscdimg.exe/3D44737265000/oscdimg.exe"
+
+            if (-not (Test-Path -Path $localOSCDIMGPath)) {
+                & $WriteLog "Downloading oscdimg.exe..."
+                Invoke-WebRequest -Uri $url -OutFile $localOSCDIMGPath
+
+                if (Test-Path $localOSCDIMGPath) {
+                    & $WriteLog "oscdimg.exe downloaded successfully."
+                } else {
+                    throw "Failed to download oscdimg.exe."
+                }
+            } else {
+                & $WriteLog "oscdimg.exe already exists locally."
+            }
+
+            $OSCDIMG = $localOSCDIMGPath
+        }
+
+        & $WriteLog "Creating ISO with oscdimg..."
+        & "$OSCDIMG" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$ScratchDisk\tiny11\boot\etfsboot.com#pEF,e,b$ScratchDisk\tiny11\efi\microsoft\boot\efisys.bin" "$ScratchDisk\tiny11" "$isoPath"
+        
+        if (Test-Path $isoPath) {
+            & $WriteLog "ISO file created at: $isoPath"
+        } else {
+            throw "Failed to create ISO file"
+        }
+    } catch {
+        & $WriteLog "Error creating ISO: $_"
         & $WriteLog "You can find the modified Windows files at: $ScratchDisk\tiny11"
+        & $WriteLog "You can manually create an ISO using tools like Rufus or ImgBurn from the files in the tiny11 directory."
         return
     }
 
